@@ -2,9 +2,9 @@
 
 random_device rd; // Seed
 mt19937 gen(rd()); // Mersenne Twister generator
-uniform_real_distribution<float> dis(0.0, 1.0);
 
-//constructor initializes the neural network with random values for weights and biases [0, 1]
+// Constructor creates the neural network of the given topology and learning rate
+// and initializes the neural network's weights and biases
 NeuralNetwork::NeuralNetwork(vector<int> topology, float learningRate):
         _topology(topology),
         _neuronMatrix({}),
@@ -13,26 +13,30 @@ NeuralNetwork::NeuralNetwork(vector<int> topology, float learningRate):
         _weightMatrix({}),
         _learningRate(learningRate)
         {
+            float boundary;
 
-            for(int i=1; i < topology.size(); ++i){
-                
+            for (int i = 1; i < topology.size(); ++i) {
                 Matrix<float> weightMatrix(topology[i], topology[i-1]);
-                weightMatrix = weightMatrix.applyFunction([](const float &val){
-                        return dis(gen);
-                    });
-                _weightMatrix.push_back(weightMatrix);
 
+                if (i == topology.size() - 1) {
+                    boundary = XavierInit(topology[i], topology[i-1]);
+                } else {
+                    boundary = HeInit(topology[i-1]);
+                }
+                uniform_real_distribution<float> dis(-boundary, boundary);
+                weightMatrix.initWith(dis, gen);
+
+                _weightMatrix.push_back(weightMatrix);
                 Matrix<float> biasMatrix(topology[i], 1);
-                biasMatrix = biasMatrix.applyFunction([](const float &val){
-                        return dis(gen);
-                    });
+
+                biasMatrix.zeros();
                 _biasMatrix.push_back(biasMatrix);
             }
             _neuronMatrix.resize(topology.size());
             _unactivatedMatrix.resize(topology.size());
         }
 
-//constructor initializes the neural network with random values for weights and biases [0, 1]
+//constructor initializes the neural network with trained values
 NeuralNetwork::NeuralNetwork(vector<int> topology, float learningRate, const char *bias_file, const char *weight_file):
         _topology(topology),
         _neuronMatrix({}),
@@ -44,14 +48,17 @@ NeuralNetwork::NeuralNetwork(vector<int> topology, float learningRate, const cha
             FILE *fp_bias = fopen(bias_file, "r");
             FILE *fp_weight = fopen(weight_file, "r");
 
-            for(int i=1; i < topology.size(); ++i){
+            for(int i = 1; i < topology.size(); ++i){
                 
                 Matrix<float> weightMatrix(topology[i], topology[i-1]);
-                weightMatrix = weightMatrix.applyFunction([fp_weight](const float &val){
+                for(int x = 0; x < topology[i]; x++) {
+                    for(int y = 0; y < topology[i-1]; y++) {
                         float temp;
                         fscanf(fp_weight, "%f ", &temp);
-                        return temp;
-                    });
+                        weightMatrix.at(x, y) = temp;
+                    }
+                }
+
                 _weightMatrix.push_back(weightMatrix);
 
                 Matrix<float> biasMatrix(topology[i], 1);
@@ -69,44 +76,27 @@ NeuralNetwork::NeuralNetwork(vector<int> topology, float learningRate, const cha
             _unactivatedMatrix.resize(topology.size());
         }
 
-// function to generate output from given input vector
-bool NeuralNetwork::feedForword(vector<float> input){
-    
+bool NeuralNetwork::feedForward(Matrix<float> neuronMatrix){   
     //check that the input size matches the given topology 
-    assert (input.size() == _topology[0]);
-
-    //transform input from vector to matrix
-    Matrix<float> neuronMatrix(input.size(), 1);
-
-    for(int i=0; i<input.size(); ++i){
-        neuronMatrix._vals[i] = input[i];
-    }
+    assert (neuronMatrix.getRows() == _topology[0]);
 
     Matrix<float> UnactivatedMatrix = neuronMatrix;
 
-    for(int i=0; i < _weightMatrix.size(); ++i){
+    for(int i = 0; i < _weightMatrix.size(); ++i){
         _neuronMatrix.at(i) = neuronMatrix;
         _unactivatedMatrix.at(i) = UnactivatedMatrix;
        
-        //z = W*a + b
-        UnactivatedMatrix = neuronMatrix.multiply(_weightMatrix[i]);
+        //z = W*x + b
+        UnactivatedMatrix = (_weightMatrix.at(i)).multiply(_neuronMatrix[i]);
         UnactivatedMatrix = UnactivatedMatrix.add(_biasMatrix[i]);
 
-        //a' = activation_function(z)
-        if(i == (_weightMatrix.size() - 1)){
-            
+        //a = activation_function(z)
+        if (i == (_weightMatrix.size() - 1)) {
             neuronMatrix = UnactivatedMatrix.Softmax();
-        
-        }else{       
+            //neuronMatrix.print();
+        } else {       
             neuronMatrix = UnactivatedMatrix.applyFunction(ReLU);
-
-            //normalise layers
-            float max = neuronMatrix.max();
-            //cout << "max: " << max << endl;
-            if(max > 1)
-                neuronMatrix = neuronMatrix.multiplyScaler(1/max);
         }
-
     }
     
     _neuronMatrix.at(_weightMatrix.size()) = neuronMatrix;
@@ -115,43 +105,45 @@ bool NeuralNetwork::feedForword(vector<float> input){
     return true;
 }
 
+bool NeuralNetwork::backPropagate(vector<float> target){
+    // δ^(L) = a^(L) - y -> output layer
+    // δ^(l) = (W^(l+1)T x δ^(l+1)) ⊙ f'(z^(l)) -> hidden layers
+    // ΔW = -α * δ^(l) x a^(l-1)T
+    // Δb = -α * δ^(l)
 
-// function to train with given output vector
-bool NeuralNetwork::backPropagate(vector<float> targetOutput){
-    
-    if(targetOutput.size() != _topology.back())
+    if(target.size() != _topology.back()) {
         return false;
-
-    // determine the simple error
-    // error = target - output
-    Matrix<float> errors(targetOutput.size(), 1);
-    errors._vals = targetOutput;
-
-    Matrix<float> neuronMatrix = _neuronMatrix.back();
-    neuronMatrix = neuronMatrix.negative();
-
-    errors = errors.add(neuronMatrix);
-
-    // back propagating the error from output layer to input layer
-    // and adjusting weights of weight matrices and bias matrics
-    for(int i = _weightMatrix.size() - 1; i >= 0; i--){
-        //calculating errrors for previous layer
-        //for the output layer the error is the simple error = target - output
-        //for other layers prevError[i] = (error[i+1] * weight[i+1].transpose()).multiplyElements(unactivatedZ[i].apply(activation_function'))
-        Matrix<float> weightMatrix = _weightMatrix[i].transpose();
-        Matrix<float> prevErrors = errors.multiply(weightMatrix);
-        Matrix<float> dOutputs = _unactivatedMatrix[i].applyFunction(DReLU);
-
-        prevErrors = prevErrors.multiplyElements(dOutputs);
-
-        Matrix<float> gradients = errors.multiplyScaler(_learningRate);
-        Matrix<float> weightGradients = _neuronMatrix[i].transpose().multiply(gradients);
-
-        _biasMatrix[i] = _biasMatrix[i].addLimited(gradients);
-
-        _weightMatrix[i] = _weightMatrix[i].addLimited(weightGradients);
-        errors = prevErrors;
     }
+
+    //Get delta for output layer
+    Matrix<float> activatedOutput = _neuronMatrix.back();
+    Matrix<float> targetOutput(target.size(), 1); // 10x1 matrix
+    targetOutput._vals = target;
+
+    Matrix<float> prev_delta; // store δ^(l+1)
+    for (int i = _weightMatrix.size() - 1; i >= 0; i--) {
+        
+        Matrix<float> delta;
+        if (i == _weightMatrix.size() - 1) { //for Softmax the derivitave cancels out
+            delta = activatedOutput.add(targetOutput.negative());
+            prev_delta = delta;
+        } else {
+            delta = (_weightMatrix[i+1].transpose().multiply(prev_delta)).multiplyElements(_unactivatedMatrix[i+1].applyFunction(DReLU));
+            prev_delta = delta;
+        }
+
+        Matrix<float> deltaBias = delta.multiplyScaler(-_learningRate);
+        //cout << "deltaBias[ " << i << "]" << endl;
+        //deltaBias.print();
+        _biasMatrix[i] = _biasMatrix[i].add(deltaBias);
+
+
+        Matrix<float> deltaWeight = deltaBias.multiply(_neuronMatrix[i].transpose());
+        //cout << "deltaWeight[ " << i << "]" << endl;
+        //deltaWeight.print();
+        _weightMatrix[i] = _weightMatrix[i].add(deltaWeight);
+    }
+
     return true;
 }
 
@@ -166,8 +158,8 @@ void NeuralNetwork::print(const char *bias_file, const char *weight_file)
 
     for(int i = 0; i < _biasMatrix.size(); ++i){
         //fprintf(fp, "-> \n");
-        for (int y = 0; y < this->_biasMatrix[i]._rows; y++){
-            for (int x = 0; x < this->_biasMatrix[i]._cols; x++){
+        for (int x = 0; x < this->_biasMatrix[i]._rows; x++){
+            for (int y = 0; y < this->_biasMatrix[i]._cols; y++){
                 fprintf(fp, "%f ", this->_biasMatrix[i].at(x, y));
                 //printf("%f ", this->_biasMatrix[i].at(x, y));
             }
@@ -181,8 +173,8 @@ void NeuralNetwork::print(const char *bias_file, const char *weight_file)
 
     for(int i = 0; i < _weightMatrix.size(); ++i){
         //fprintf(fp, "-> \n");
-        for (int y = 0; y < this->_weightMatrix[i]._rows; y++){
-            for (int x = 0; x < this->_weightMatrix[i]._cols; x++){
+        for (int x = 0; x < this->_weightMatrix[i]._rows; x++){
+            for (int y = 0; y < this->_weightMatrix[i]._cols; y++){
                 fprintf(fp, "%f ", this->_weightMatrix[i].at(x, y));
                 //printf("%f ", this->_weightMatrix[i].at(x, y));
             }
@@ -191,4 +183,25 @@ void NeuralNetwork::print(const char *bias_file, const char *weight_file)
         }
     }
     fclose(fp);
+}
+
+void NeuralNetwork::printToTerminal()
+{
+    for(int i = 0; i < _biasMatrix.size(); ++i){
+        for (int x = 0; x < this->_biasMatrix[i]._rows; x++){
+            for (int y = 0; y < this->_biasMatrix[i]._cols; y++){
+                printf("%f ", this->_biasMatrix[i].at(x, y));
+            }
+            printf("\n");
+        }
+    }
+
+    for(int i = 0; i < _weightMatrix.size(); ++i){
+        for (int x = 0; x < this->_weightMatrix[i]._rows; x++){
+            for (int y = 0; y < this->_weightMatrix[i]._cols; y++){
+                printf("%f ", this->_weightMatrix[i].at(x, y));
+            }
+            printf("\n");
+        }
+    }
 }
