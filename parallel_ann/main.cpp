@@ -14,6 +14,7 @@ using namespace std;
 #define OUTPUT_NEURON_NUM 10
 
 #define EPOCH 10000
+#define TEST_POOL 10000
 #define PIXEL_MAX_VAL 255
 #define LEARNING_RATE 0.001
 
@@ -56,6 +57,13 @@ int main(int argc, char* argv[])
             cout << "train, test or quit?" << endl;
             cin >> choice;
 
+            if(choice == "train" || choice == "test") {
+                int num_threads = 0;
+                cout << "input num of threads:" << endl;
+                cin >> num_threads;
+                Matrix<float>::omp_threads = num_threads;
+            }
+
             if(choice == "train") {
                 train(topology, bias_file, weight_file);
             } 
@@ -69,7 +77,6 @@ int main(int argc, char* argv[])
 }
 
 void train(vector<int> topology, const char * bias_file, const char * weight_file){
-
     //creating neural network
     NeuralNetwork nn(topology, LEARNING_RATE);
 
@@ -84,6 +91,7 @@ void train(vector<int> topology, const char * bias_file, const char * weight_fil
     
     //training the neural network with randomized data
     cout << "training start\n";
+    double s = omp_get_wtime();
 
     for(int i = 0; i < EPOCH; i++)
     {
@@ -100,13 +108,16 @@ void train(vector<int> topology, const char * bias_file, const char * weight_fil
         assert(fp != NULL);
         
         for (int j = 0; j < (INPUT_NEURON_NUM+OUTPUT_NEURON_NUM); ++j) {
-            if (j < OUTPUT_NEURON_NUM) {
-                fscanf(fp, "%d ", &index);
-                targetOutput.at(j) = (float)index;
+            if(fscanf(fp, "%d ", &index) == 1) {
+                if (j < OUTPUT_NEURON_NUM) {
+                    targetOutput.at(j) = (float)index;
+                } else {
+                    targetInput._vals[j - OUTPUT_NEURON_NUM] = (float)index/PIXEL_MAX_VAL;
+                }
             } else {
-                fscanf(fp, "%d ", &index);
-                targetInput._vals[j - OUTPUT_NEURON_NUM] = (float)index/PIXEL_MAX_VAL;
+                assert(false && "Reading file error!");
             }
+            
         }
 
         fclose(fp);
@@ -114,13 +125,13 @@ void train(vector<int> topology, const char * bias_file, const char * weight_fil
         nn.feedForward(targetInput);
         nn.backPropagate(targetOutput);
     }
-    cout << "training complete\n";
+    s = omp_get_wtime() - s;
+    cout << "training complete with " << Matrix<float>::omp_threads << " threads in " << s/EPOCH << " sec/epoch" << endl;
     
     nn.print(bias_file, weight_file);
 }
 
 void test(vector<int> topology, const char * bias_file, const char * weight_file) {
-
     NeuralNetwork nn(topology, LEARNING_RATE, bias_file, weight_file);
 
     //random_device dev;
@@ -135,7 +146,8 @@ void test(vector<int> topology, const char * bias_file, const char * weight_file
 
     int correct_guess = 0;
 
-    for(int i = 0; i < 10000; ++i){
+    double s = omp_get_wtime();
+    for(int i = 0; i < TEST_POOL; ++i){
 
         //get random index
         //int index = dist10000(rng);
@@ -150,13 +162,16 @@ void test(vector<int> topology, const char * bias_file, const char * weight_file
         assert(fp != NULL);
         
         for(int j = 0; j < (INPUT_NEURON_NUM + OUTPUT_NEURON_NUM); ++j){
-            if(j < OUTPUT_NEURON_NUM){
-                fscanf(fp, "%d ", &temp);
-                targetOutput.at(j) = (float)temp;
-            }else{
-                fscanf(fp, "%d ", &temp);
-                targetInput._vals[j - OUTPUT_NEURON_NUM] = (float)temp/PIXEL_MAX_VAL;
+            if (fscanf(fp, "%d ", &temp) == 1) {
+                if(j < OUTPUT_NEURON_NUM){
+                    targetOutput.at(j) = (float)temp;
+                }else{
+                    targetInput._vals[j - OUTPUT_NEURON_NUM] = (float)temp/PIXEL_MAX_VAL;
+                }
+            } else {
+                assert(false && "Read file error!");
             }
+            
         }
         fclose(fp);
 
@@ -173,7 +188,9 @@ void test(vector<int> topology, const char * bias_file, const char * weight_file
         //cout << "should've gotten: " << actual_label << " actually got: " << trained_label << endl;
         
     }
+    s = omp_get_wtime() - s;
 
+    cout << "testing complete with " << Matrix<float>::omp_threads << " threads in " << s/TEST_POOL << " sec/test" << endl;
     cout << "accuracy of simple neural network: " << ((float)correct_guess/100) << "%" << endl; 
 
 }
@@ -195,7 +212,7 @@ int findLabelOutput(vector<float> output){
     int label = 0;
     float max = output.at(label);
 
-    for (int i = 0; i < output.size(); ++i) {
+    for (long unsigned int i = 0; i < output.size(); ++i) {
         if (max < output.at(i)) {
             label = i;
             max = output.at(i);

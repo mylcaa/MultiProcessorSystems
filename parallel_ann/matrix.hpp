@@ -4,6 +4,7 @@
 #include <cassert>
 #include <functional>
 #include <math.h>
+#include <omp.h>
 
 using namespace std;
 
@@ -12,6 +13,8 @@ public:
     int _rows;
     int _cols;
     vector<T> _vals;
+
+    static int omp_threads;
 
 public:
     Matrix(int rows, int cols) 
@@ -30,16 +33,14 @@ public:
         return _vals[row * _cols + col];
     }
 
-    bool isSquare() {
-        return _rows == _cols;
-    }
-
     int getRows() { return _rows; }
 
     int getCols() { return _cols; }
 
     Matrix negative() {
         Matrix output(_rows, _cols);
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = -at(x, y);
@@ -51,6 +52,8 @@ public:
     Matrix multiply(Matrix& target) {
         assert(target._rows == _cols);
         Matrix output(_rows, target._cols);
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 T result = T();
@@ -65,6 +68,8 @@ public:
     Matrix multiply(Matrix&& target) {
         assert(target._rows == _cols);
         Matrix output(_rows, target._cols);
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 T result = T();
@@ -79,6 +84,8 @@ public:
     Matrix multiplyElements(Matrix& target) {
         assert(_rows == target._rows && _cols == target._cols);
         Matrix output(_rows, _cols);
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = at(x, y) * target.at(x, y);
@@ -90,6 +97,8 @@ public:
     Matrix multiplyElements(Matrix&& target) {
         assert(_rows == target._rows && _cols == target._cols);
         Matrix output(_rows, _cols);
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = at(x, y) * target.at(x, y);
@@ -99,6 +108,8 @@ public:
     }
 
     void zeros() {
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < _rows; x++) {
             for (int y = 0; y < _cols; y++) {
                 at(x, y) = 0;
@@ -107,6 +118,8 @@ public:
     }
 
     void ones() {
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < _rows; x++) {
             for (int y = 0; y < _cols; y++) {
                 at(x, y) = 1;
@@ -114,71 +127,26 @@ public:
         }
     }
 
-    float sumElements() {
-        float sum = 0;
-        for (int x = 0; x < _rows; x++) {
-            for (int y = 0; y < _cols; y++) {
-                sum += at(x, y);
-            }
-        }
-        return sum;
-    }
-
-    float max() {
-        float max = at(0,0);
-        for (int x = 0; x < _rows; x++) {
-            for (int y = 0; y < _cols; y++) {
-                max = ((max <= at(x, y))? at(x, y) : max);
-            }
-        }
-        return max;
-    }
-
-    Matrix logSoftmax() {
-
-        float max = this -> max();
-
-        cout << "max: " << max << endl;
-
-        Matrix<float> targetMatrix = this -> addScaler(-max);
-
-        cout << "unactivated after normalisation:" << endl;
-        targetMatrix.print();
-
-        targetMatrix = targetMatrix.applyFunction([](const float &val){
-                    return exp(val);
-                });
-
-        cout << "output after exp:" << endl;
-        targetMatrix.print();
-
-        float sum = targetMatrix.sumElements();
-        sum = log(sum);
-
-        targetMatrix = targetMatrix.addScaler(-sum);
-
-        cout << "output after sum:" << endl;
-        targetMatrix.print();
-
-        targetMatrix = targetMatrix.addScaler(-max);
-
-        cout << "output after logsoftmax:" << endl;
-        targetMatrix.print();
-
-        return targetMatrix;
-    }
-
     Matrix Softmax() {
         Matrix targetMatrix(_rows, _cols);
 
         // 1. Find max for stability
         float maxVal = at(0, 0);
+
+        #pragma omp parallel for reduction(max:maxVal) \
+        if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 1; x < _rows; x++) {
-            maxVal = (maxVal <= at(x, 0)) ? at(x, 0) : maxVal;
+            float v = at(x, 0);
+            if (v >= maxVal) {
+                maxVal = v;
+            }
         }
 
         // 2. Compute exponentials and sum
         float sumExp = 0.0f;
+
+        #pragma omp parallel for reduction(+:sumExp) \
+        if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < _rows; x++) {
             float val = exp(at(x, 0) - maxVal);
             targetMatrix.at(x, 0) = val;
@@ -186,6 +154,8 @@ public:
         }
 
         // 3. Normalize
+        #pragma omp parallel for \
+        if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < _rows; x++) {
             targetMatrix.at(x, 0) /= sumExp;
         }
@@ -205,6 +175,8 @@ public:
     Matrix add(Matrix& target) {
         assert(_rows == target._rows && _cols == target._cols);
         Matrix output(_rows, _cols);
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = at(x, y) + target.at(x, y);
@@ -216,6 +188,8 @@ public:
     Matrix add(Matrix&& target) {
         assert(_rows == target._rows && _cols == target._cols);
         Matrix output(_rows, _cols);
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = at(x, y) + target.at(x, y);
@@ -226,6 +200,8 @@ public:
 
     Matrix applyFunction(function<T(const T&)> func) {
         Matrix output(_rows, _cols);
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = func(at(x, y));
@@ -235,6 +211,8 @@ public:
     }
 
     void initWith(uniform_real_distribution<T>& dist, std::mt19937& gen) {
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < _rows; x++) {
             for (int y = 0; y < _cols; y++) {
                 at(x, y) = dist(gen);
@@ -244,6 +222,8 @@ public:
 
     Matrix multiplyScaler(float s) {
         Matrix output(_rows, _cols);
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = at(x, y) * s;
@@ -253,18 +233,10 @@ public:
 
     }
 
-    Matrix addScaler(float s) {
-        Matrix output(_rows, _cols);
-        for (int x = 0; x < output._rows; x++) {
-            for (int y = 0; y < output._cols; y++) {
-                output.at(x, y) = at(x, y) + s;
-            }
-        }
-        return output;
-    }
-
     Matrix transpose() {
         Matrix output(_cols, _rows);
+
+        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
         for (int x = 0; x < _rows; x++) {
             for (int y = 0; y < _cols; y++) {
                 output.at(y, x) = at(x, y);
@@ -273,74 +245,15 @@ public:
         return output;
     }
 
-    Matrix cofactor(int row, int col) {
-        Matrix output(_rows - 1, _cols - 1);
-        int i = 0;
-        for (int x = 0; x < _rows; x++) {
-            for (int y = 0; y < _cols; y++) {
-                if (x == col || y == row) continue;
-                output._vals[i++] = at(x, y);
-            }
-        }
-        return output;
-    }
-
-    T determinant() {
-        assert(_rows == _cols);
-        T output = T();
-
-        if (_rows == 1) {
-            return _vals[0];
-        }
-        else {
-            int32_t sign = 1;
-            for (int x = 0; x < _cols; x++) {
-                output += sign * at(0, x) * cofactor(0, x).determinant();
-                sign *= -1;
-            }
-        }
-        return output;
-    }
-
-    Matrix adjoint() {
-        assert(_rows == _cols);
-        Matrix output(_rows, _cols);
-        int32_t sign = 1;
-        for (int x = 0; x < _rows; x++) {
-            for (int y = 0; y < _cols; y++) {
-                output.at(x, y) = sign * cofactor(x, y).determinant();
-                sign *= -1;
-            }
-        }
-        output = output.transpose();
-
-        return output;
-    }
-
-    Matrix inverse() {
-        Matrix adj = adjoint();
-        T factor = determinant();
-        for (int x = 0; x < adj._cols; x++) {
-            for (int y = 0; y < adj._rows; y++) {
-                adj.at(x, y) = adj.at(x, y) / factor;
-            }
-        }
-        return adj;
-    }
 }; // class Matrix
+
+// Init static variable num of threads
+template<typename T>
+int Matrix<T>::omp_threads = 0;
 
 //ReLU activation function - Rectified Linear Unit
 inline float ReLU(float val){
     return ((val <= 0)? 0 : val);
-}
-
-template<typename T> void LogMatrix(Matrix<T>& mat) {
-    for (int x = 0; x < mat._rows; x++) {
-        for (int y = 0; y < mat._cols; y++) {
-            cout << setw(10) << mat.at(x, y) << " ";
-        }
-        cout << endl;
-    }
 }
 
 

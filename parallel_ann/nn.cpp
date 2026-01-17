@@ -15,10 +15,11 @@ NeuralNetwork::NeuralNetwork(vector<int> topology, float learningRate):
         {
             float boundary;
 
-            for (int i = 1; i < topology.size(); ++i) {
+            int topology_size = topology.size();
+            for (int i = 1; i < topology_size; ++i) {
                 Matrix<float> weightMatrix(topology[i], topology[i-1]);
 
-                if (i == topology.size() - 1) {
+                if (i == topology_size - 1) {
                     boundary = XavierInit(topology[i], topology[i-1]);
                 } else {
                     boundary = HeInit(topology[i-1]);
@@ -48,25 +49,29 @@ NeuralNetwork::NeuralNetwork(vector<int> topology, float learningRate, const cha
             FILE *fp_bias = fopen(bias_file, "r");
             FILE *fp_weight = fopen(weight_file, "r");
 
-            for(int i = 1; i < topology.size(); ++i){
+            int topology_size = topology.size();
+            for(int i = 1; i < topology_size; ++i){
                 
                 Matrix<float> weightMatrix(topology[i], topology[i-1]);
                 for(int x = 0; x < topology[i]; x++) {
                     for(int y = 0; y < topology[i-1]; y++) {
                         float temp;
-                        fscanf(fp_weight, "%f ", &temp);
+                        if(fscanf(fp_weight, "%f ", &temp) != 1) {
+                            assert(false && "Read weight file error");
+                        }
                         weightMatrix.at(x, y) = temp;
                     }
                 }
-
                 _weightMatrix.push_back(weightMatrix);
 
                 Matrix<float> biasMatrix(topology[i], 1);
-                biasMatrix = biasMatrix.applyFunction([fp_bias](const float &val){
-                        float temp;
-                        fscanf(fp_bias, "%f ", &temp);
-                        return temp;
-                    });
+                for(int x = 0; x < topology[i]; x++) {
+                    float temp;
+                    if(fscanf(fp_bias, "%f ", &temp) != 1) {
+                        assert(false && "Read bias file error");
+                    }
+                    biasMatrix.at(x, 0) = temp;
+                }
                 _biasMatrix.push_back(biasMatrix);
             }
 
@@ -82,7 +87,8 @@ bool NeuralNetwork::feedForward(Matrix<float> neuronMatrix){
 
     Matrix<float> UnactivatedMatrix = neuronMatrix;
 
-    for(int i = 0; i < _weightMatrix.size(); ++i){
+    int weightMatrix_size = _weightMatrix.size();
+    for(int i = 0; i < weightMatrix_size; ++i){
         _neuronMatrix.at(i) = neuronMatrix;
         _unactivatedMatrix.at(i) = UnactivatedMatrix;
        
@@ -91,7 +97,7 @@ bool NeuralNetwork::feedForward(Matrix<float> neuronMatrix){
         UnactivatedMatrix = UnactivatedMatrix.add(_biasMatrix[i]);
 
         //a = activation_function(z)
-        if (i == (_weightMatrix.size() - 1)) {
+        if (i == (weightMatrix_size - 1)) {
             neuronMatrix = UnactivatedMatrix.Softmax();
             //neuronMatrix.print();
         } else {       
@@ -111,7 +117,7 @@ bool NeuralNetwork::backPropagate(vector<float> target){
     // ΔW = -α * δ^(l) x a^(l-1)T
     // Δb = -α * δ^(l)
 
-    if(target.size() != _topology.back()) {
+    if((int)target.size() != _topology.back()) {
         return false;
     }
 
@@ -121,10 +127,11 @@ bool NeuralNetwork::backPropagate(vector<float> target){
     targetOutput._vals = target;
 
     Matrix<float> prev_delta; // store δ^(l+1)
-    for (int i = _weightMatrix.size() - 1; i >= 0; i--) {
+    int weightMatrix_size = _weightMatrix.size();
+    for (int i = weightMatrix_size - 1; i >= 0; i--) {
         
         Matrix<float> delta;
-        if (i == _weightMatrix.size() - 1) { //for Softmax the derivitave cancels out
+        if (i == weightMatrix_size - 1) { //for Softmax the derivitave cancels out
             delta = activatedOutput.add(targetOutput.negative());
             prev_delta = delta;
         } else {
@@ -156,7 +163,8 @@ void NeuralNetwork::print(const char *bias_file, const char *weight_file)
 {
     FILE *fp = fopen(bias_file, "w");
 
-    for(int i = 0; i < _biasMatrix.size(); ++i){
+    int biasMatrix_size = _biasMatrix.size();
+    for(int i = 0; i < biasMatrix_size; ++i){
         //fprintf(fp, "-> \n");
         for (int x = 0; x < this->_biasMatrix[i]._rows; x++){
             for (int y = 0; y < this->_biasMatrix[i]._cols; y++){
@@ -171,7 +179,8 @@ void NeuralNetwork::print(const char *bias_file, const char *weight_file)
 
     fp = fopen(weight_file, "w");
 
-    for(int i = 0; i < _weightMatrix.size(); ++i){
+    int weightMatrix_size = _weightMatrix.size();
+    for(int i = 0; i < weightMatrix_size; ++i){
         //fprintf(fp, "-> \n");
         for (int x = 0; x < this->_weightMatrix[i]._rows; x++){
             for (int y = 0; y < this->_weightMatrix[i]._cols; y++){
@@ -183,25 +192,4 @@ void NeuralNetwork::print(const char *bias_file, const char *weight_file)
         }
     }
     fclose(fp);
-}
-
-void NeuralNetwork::printToTerminal()
-{
-    for(int i = 0; i < _biasMatrix.size(); ++i){
-        for (int x = 0; x < this->_biasMatrix[i]._rows; x++){
-            for (int y = 0; y < this->_biasMatrix[i]._cols; y++){
-                printf("%f ", this->_biasMatrix[i].at(x, y));
-            }
-            printf("\n");
-        }
-    }
-
-    for(int i = 0; i < _weightMatrix.size(); ++i){
-        for (int x = 0; x < this->_weightMatrix[i]._rows; x++){
-            for (int y = 0; y < this->_weightMatrix[i]._cols; y++){
-                printf("%f ", this->_weightMatrix[i].at(x, y));
-            }
-            printf("\n");
-        }
-    }
 }

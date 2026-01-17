@@ -35,8 +35,6 @@ class NeuralNetwork
         vector<float> getPredictions();
         // write down weights and biases of a trained neural network
         void print(const char *bias_file, const char *weight_file);
-
-        void printToTerminal();
 };
 
 //Derivative ReLU 
