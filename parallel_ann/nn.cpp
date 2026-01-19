@@ -88,6 +88,7 @@ bool NeuralNetwork::feedForward(Matrix<float> neuronMatrix){
     Matrix<float> UnactivatedMatrix = neuronMatrix;
 
     int weightMatrix_size = _weightMatrix.size();
+
     for(int i = 0; i < weightMatrix_size; ++i){
         _neuronMatrix.at(i) = neuronMatrix;
         _unactivatedMatrix.at(i) = UnactivatedMatrix;

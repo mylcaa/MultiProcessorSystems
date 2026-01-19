@@ -40,7 +40,7 @@ public:
     Matrix negative() {
         Matrix output(_rows, _cols);
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = -at(x, y);
@@ -53,7 +53,7 @@ public:
         assert(target._rows == _cols);
         Matrix output(_rows, target._cols);
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 T result = T();
@@ -69,7 +69,7 @@ public:
         assert(target._rows == _cols);
         Matrix output(_rows, target._cols);
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 T result = T();
@@ -85,7 +85,7 @@ public:
         assert(_rows == target._rows && _cols == target._cols);
         Matrix output(_rows, _cols);
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = at(x, y) * target.at(x, y);
@@ -98,7 +98,7 @@ public:
         assert(_rows == target._rows && _cols == target._cols);
         Matrix output(_rows, _cols);
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = at(x, y) * target.at(x, y);
@@ -109,7 +109,7 @@ public:
 
     void zeros() {
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < _rows; x++) {
             for (int y = 0; y < _cols; y++) {
                 at(x, y) = 0;
@@ -119,7 +119,7 @@ public:
 
     void ones() {
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < _rows; x++) {
             for (int y = 0; y < _cols; y++) {
                 at(x, y) = 1;
@@ -133,8 +133,7 @@ public:
         // 1. Find max for stability
         float maxVal = at(0, 0);
 
-        #pragma omp parallel for reduction(max:maxVal) \
-        if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) reduction(max:maxVal)
         for (int x = 1; x < _rows; x++) {
             float v = at(x, 0);
             if (v >= maxVal) {
@@ -145,8 +144,7 @@ public:
         // 2. Compute exponentials and sum
         float sumExp = 0.0f;
 
-        #pragma omp parallel for reduction(+:sumExp) \
-        if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) reduction(+:sumExp)
         for (int x = 0; x < _rows; x++) {
             float val = exp(at(x, 0) - maxVal);
             targetMatrix.at(x, 0) = val;
@@ -154,8 +152,7 @@ public:
         }
 
         // 3. Normalize
-        #pragma omp parallel for \
-        if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads)
         for (int x = 0; x < _rows; x++) {
             targetMatrix.at(x, 0) /= sumExp;
         }
@@ -176,7 +173,7 @@ public:
         assert(_rows == target._rows && _cols == target._cols);
         Matrix output(_rows, _cols);
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = at(x, y) + target.at(x, y);
@@ -189,7 +186,7 @@ public:
         assert(_rows == target._rows && _cols == target._cols);
         Matrix output(_rows, _cols);
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = at(x, y) + target.at(x, y);
@@ -201,7 +198,7 @@ public:
     Matrix applyFunction(function<T(const T&)> func) {
         Matrix output(_rows, _cols);
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = func(at(x, y));
@@ -212,7 +209,7 @@ public:
 
     void initWith(uniform_real_distribution<T>& dist, std::mt19937& gen) {
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < _rows; x++) {
             for (int y = 0; y < _cols; y++) {
                 at(x, y) = dist(gen);
@@ -223,7 +220,7 @@ public:
     Matrix multiplyScaler(float s) {
         Matrix output(_rows, _cols);
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < output._rows; x++) {
             for (int y = 0; y < output._cols; y++) {
                 output.at(x, y) = at(x, y) * s;
@@ -236,7 +233,7 @@ public:
     Matrix transpose() {
         Matrix output(_cols, _rows);
 
-        #pragma omp parallel if(omp_threads > 0) num_threads(omp_threads)
+        #pragma omp parallel for num_threads(omp_threads) collapse(2)
         for (int x = 0; x < _rows; x++) {
             for (int y = 0; y < _cols; y++) {
                 output.at(y, x) = at(x, y);

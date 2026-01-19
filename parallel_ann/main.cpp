@@ -21,6 +21,12 @@ using namespace std;
 #define TRAIN_FILE_PATH "train/train_"
 #define TEST_FILE_PATH "test/test_"
 
+const char *weight_file = "weights.txt";
+const char *bias_file = "biases.txt";
+
+string train_file_path = "";
+string test_file_path = "";
+
 void train(vector<int>, const char *, const char *);
 void test(vector<int>, const char *, const char *);
 int findLabel(vector<float>);
@@ -33,6 +39,15 @@ int main(int argc, char* argv[])
     //create topology of neural network
     vector<int> topology;
     int numLayers;
+    int num_threads = 0;
+
+    string choice;
+
+    cout << "input path to train folder (data must be in the form <path_to_train_folder/train/train_>):" << endl;
+    cin >> train_file_path;
+
+    cout << "input path to test folder (data must be in the form <path_to_test_folder/test/test_>):" << endl;
+    cin >> test_file_path;
 
     cout << "input num of hidden layers:" << endl;
     cin >> numLayers;
@@ -47,18 +62,12 @@ int main(int argc, char* argv[])
     }
 
     topology.push_back(OUTPUT_NEURON_NUM);
-    
-    const char *weight_file = "weights.txt";
-    const char *bias_file = "biases.txt";
-
-    string choice;
 
     while (choice != "quit") {
             cout << "train, test or quit?" << endl;
             cin >> choice;
 
             if(choice == "train" || choice == "test") {
-                int num_threads = 0;
                 cout << "input num of threads:" << endl;
                 cin >> num_threads;
                 Matrix<float>::omp_threads = num_threads;
@@ -99,7 +108,8 @@ void train(vector<int> topology, const char * bias_file, const char * weight_fil
         int index = dist60000(rng);
         
         //form file path
-        train = TRAIN_FILE_PATH;
+        train = train_file_path;
+        //train = TRAIN_FILE_PATH;
         train.append(to_string(index));
         train.append(".txt");
         const char * ctrain = train.c_str();
@@ -117,7 +127,6 @@ void train(vector<int> topology, const char * bias_file, const char * weight_fil
             } else {
                 assert(false && "Reading file error!");
             }
-            
         }
 
         fclose(fp);
@@ -125,11 +134,13 @@ void train(vector<int> topology, const char * bias_file, const char * weight_fil
         nn.feedForward(targetInput);
         nn.backPropagate(targetOutput);
     }
+
     s = omp_get_wtime() - s;
-    cout << "training complete with " << Matrix<float>::omp_threads << " threads in " << s/EPOCH << " sec/epoch" << endl;
+    cout << "training complete with " << Matrix<float>::omp_threads << " threads in " << s << " seconds or in " << s/EPOCH << " seconds per epoch" << endl;
     
     nn.print(bias_file, weight_file);
 }
+
 
 void test(vector<int> topology, const char * bias_file, const char * weight_file) {
     NeuralNetwork nn(topology, LEARNING_RATE, bias_file, weight_file);
@@ -153,7 +164,8 @@ void test(vector<int> topology, const char * bias_file, const char * weight_file
         //int index = dist10000(rng);
 
         //form file path
-        test = TEST_FILE_PATH;
+        //test = TEST_FILE_PATH;
+        test = test_file_path;
         test.append(to_string(i));
         test.append(".txt");
         const char * ctest = test.c_str();
@@ -190,7 +202,7 @@ void test(vector<int> topology, const char * bias_file, const char * weight_file
     }
     s = omp_get_wtime() - s;
 
-    cout << "testing complete with " << Matrix<float>::omp_threads << " threads in " << s/TEST_POOL << " sec/test" << endl;
+    cout << "testing complete with " << Matrix<float>::omp_threads << " threads in " << s << " sec or in " << s/TEST_POOL << " sec/test" << endl;
     cout << "accuracy of simple neural network: " << ((float)correct_guess/100) << "%" << endl; 
 
 }
