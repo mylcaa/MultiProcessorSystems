@@ -3,42 +3,24 @@
 #include "game.hpp"
 #include "player.hpp"
 #include "laser.hpp"
-#include "asteroid.hpp"
-
-#define LASER_CAPACITY 50
-#define ASTEROID_CAPACITY 50
+#include "asteroid.hpp"  
 
 int main() {
-
-//Frame dimensions
-    int frameWidth = 800;
-    int frameHeight = 600;
-
-//Laser dimensions
-    int laserWidth = 4;
-    int laserHeight = 10;
-
+//Setup
     std::vector<Laser> lasers;
     for(int i=0; i < LASER_CAPACITY; ++i) {
-        lasers.push_back(Laser(cv::Size(laserWidth, laserHeight)));
+        lasers.push_back(Laser(cv::Size(LASER_WIDTH, LASER_HEIGHT)));
     }
 
-//Player dimensions
-    int playerWidth = 20;
-    int playerHeight = 40;
-
-    Player player(cv::Point(frameWidth / 2 - playerWidth, frameHeight - playerHeight), cv::Size(playerWidth, playerHeight), lasers);
-
-//Asteroid dimensions
-    int asteroidWidth = 10;
-    int asteroidHeight = 10;
+    Player player(cv::Point(FRAME_WIDTH / 2 - PLAYER_WIDTH, FRAME_HEIGHT - PLAYER_HEIGHT), cv::Size(PLAYER_WIDTH, PLAYER_HEIGHT), lasers);
 
     std::vector<Asteroid> asteroids;
     for(int i = 0; i < ASTEROID_CAPACITY; ++i) {
-        asteroids.push_back(Asteroid(cv::Size(laserWidth, laserHeight), frameHeight));
+        asteroids.push_back(Asteroid(cv::Size(ASTEROID_WIDTH, ASTEROID_HEIGHT), FRAME_HEIGHT));
     }
-
-    Game game(player, asteroids, frameWidth, frameHeight);
+//Game start
+    Game game(player, asteroids, FRAME_WIDTH, FRAME_HEIGHT);
     game.run();
+
     return 0;
 }

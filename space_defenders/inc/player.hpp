@@ -5,7 +5,9 @@
 #include "laser.hpp"
 #include <vector>
 
-#define PLAYER_STEP 20
+#define PLAYER_STEP 10
+#define PLAYER_WIDTH 20
+#define PLAYER_HEIGHT 40
 
 class Player final : public Entity {
 private:
@@ -22,6 +24,7 @@ public:
   int getPosition();
   void setPosition(int dx);
   void fireLaser();
+  bool hitAsteroid(cv::Point asteroidPosition, cv::Size asteroidSize);
 };
 
 #endif

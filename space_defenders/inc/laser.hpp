@@ -3,6 +3,10 @@
 
 #include "entity.hpp"
 
+#define LASER_CAPACITY 50
+#define LASER_WIDTH 4
+#define LASER_HEIGHT 10
+
 class Laser final : public Entity {
 private:
   float speed = 500;
@@ -14,7 +18,9 @@ public:
   void update(float dt) override;
   void draw(cv::Mat &frame) override;
 
-  void setPosition(cv::Point&& newPosition);
+  void setPosition(cv::Point &&newPosition);
+  cv::Point getPosition();
+  cv::Size getSize();
   void setActiveStatus(bool status);
 };
 
