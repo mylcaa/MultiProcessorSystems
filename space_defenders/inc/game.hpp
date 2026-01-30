@@ -3,6 +3,7 @@
 
 #include <opencv2/opencv.hpp>
 #include <vector>
+#include <omp.h>
 
 #include "asteroid.hpp"
 #include "player.hpp"
@@ -13,20 +14,29 @@
 
 class Game final {
 private:
-  int width;
-  int height;
-  int activeAsteroids = 2;
-  int score = 0;
-  bool running = true;
-  bool won = false;
-  bool lost = false;
-
   Player &player;
   std::vector<Asteroid> &asteroids;
+  // game configurations
+  int _width;
+  int _height;
+  int _activeAsteroids;
+  int _score;
+  
+  // game flags
+  bool _running = true;
+  bool _won = false;
+  bool _lost = false;
+
   cv::Mat frame;
 
+  omp_lock_t run_lock;
+  omp_lock_t asteroid_lock;
+  omp_lock_t score_lock;
+  omp_lock_t result_lock;
+
 public:
-  Game(Player &player, std::vector<Asteroid> &asteroids, int width, int height);
+  Game(Player &player, std::vector<Asteroid> &asteroids, int width, int height, int activeAsteroids);
+  ~Game();
   void run();
 
 private:
@@ -34,7 +44,7 @@ private:
   void processInput();
 
   /* (n-2) threads - update active asteroids and laser position */
-  void update(float dt, float gameDuration);
+  void update();
 
   /* 2nd thread - update GUI */
   void render();
