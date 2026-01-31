@@ -16,6 +16,7 @@ private:
   std::vector<Laser> &lasers;
 
   omp_lock_t player_lock;
+  omp_lock_t laser_lock;
 
 public:
   Player(cv::Point &&pos, cv::Size &&size, std::vector<Laser> &lasers);

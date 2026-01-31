@@ -2,6 +2,7 @@
 #define ASTEROID_HPP
 
 #include "entity.hpp"
+#include <omp.h>
 
 #define ASTEROID_CAPACITY 6
 #define ASTEROID_WIDTH 20
@@ -14,7 +15,7 @@ private:
 
 public:
   Asteroid(cv::Size &&size, int frameHeight);
-  ~Asteroid() = default;
+  ~Asteroid()=default;
 
   void update(float dt) override;
   void draw(cv::Mat &frame) override;

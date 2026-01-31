@@ -12,6 +12,18 @@
 #define FRAME_WIDTH 800
 #define FRAME_HEIGHT 600
 
+enum class player_action_t{
+  NONE = 0,
+  LEFT,
+  RIGHT,
+  SHOOT
+};
+
+struct game_state_t {
+  bool won;
+  bool lost;
+};
+
 class Game final {
 private:
   Player &player;
@@ -23,16 +35,17 @@ private:
   int _score;
   
   // game flags
-  bool _running = true;
-  bool _won = false;
-  bool _lost = false;
+  bool running = true;
+  game_state_t game_state = {false, false};
+  player_action_t player_action = player_action_t::NONE;
 
   cv::Mat frame;
 
   omp_lock_t run_lock;
+  omp_lock_t player_lock;
   omp_lock_t asteroid_lock;
   omp_lock_t score_lock;
-  omp_lock_t result_lock;
+  omp_lock_t state_lock;
 
 public:
   Game(Player &player, std::vector<Asteroid> &asteroids, int width, int height, int activeAsteroids);
@@ -40,14 +53,20 @@ public:
   void run();
 
 private:
-  /* 1st thread - handle key input, player movement and laser firing */
-  void processInput();
+  /* 1st thread - player movement */
+  void playerLoop();
 
-  /* (n-2) threads - update active asteroids and laser position */
-  void update();
+  /* (n-2) threads - asteroid movement */
+  void asteroidLoop();
 
-  /* 2nd thread - update GUI */
-  void render();
+  /* 2nd thread - handle input and render */
+  void guiLoop();
+
+  //helper functions
+  void processCursorInput(int key);
+  void processKeyInput(int key);
+  void drawScore();
+  void checkEndGame();
 };
 
 #endif

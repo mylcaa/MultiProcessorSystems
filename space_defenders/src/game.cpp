@@ -1,6 +1,7 @@
 #include "game.hpp"
 #include <chrono>
 #include <random>
+#include <thread>
 
 std::random_device dev;
 std::mt19937 rng(dev());
@@ -17,17 +18,19 @@ Game::Game(Player &player, std::vector<Asteroid> &asteroids, int width, int heig
   _score = 0;
 
   frame = cv::Mat(_height, _width, CV_8UC3);
-  omp_init_lock(&run_lock);
+  omp_init_lock(&player_lock);
   omp_init_lock(&asteroid_lock);
   omp_init_lock(&score_lock);
-  omp_init_lock(&result_lock);
+  omp_init_lock(&state_lock);
+  omp_init_lock(&run_lock);
 }
 
 Game::~Game() {
-  omp_destroy_lock(&run_lock);
+  omp_destroy_lock(&player_lock);
   omp_destroy_lock(&asteroid_lock);
   omp_destroy_lock(&score_lock);
-  omp_destroy_lock(&result_lock);
+  omp_destroy_lock(&state_lock);
+  omp_destroy_lock(&run_lock);
 }
 
 void Game::run() {
@@ -39,129 +42,220 @@ void Game::run() {
 
   //run the three parts of the game on seperate threads
   int num_threads = 3;
-  #pragma omp parallel num_threads(num_threads)
+  #pragma omp parallel num_threads(num_threads) shared(player, asteroids, running, _width, _height, _activeAsteroids, _score, game_state, player_action, frame)
   {
     int tid = omp_get_thread_num();
 
     if (tid == 0) {
-      processInput();
-    } else if (tid == 1) {
-      render();
+      guiLoop();
+    } else 
+    if (tid == 1) {
+      playerLoop();
     } else {
-      update();
+      asteroidLoop();
     }
   }
 }
 
-void Game::processInput() {
-  while(true) {
-    omp_set_lock(&run_lock);
-    bool localRunning = _running;
-    omp_unset_lock(&run_lock);
-
-    if (!localRunning)
-      break;
-
-    int key = cv::waitKey(1);
-
-    // Esc button pressed
-    if (key == 27) {
-      omp_set_lock(&run_lock);
-      _running = false;
-      break;
-      omp_unset_lock(&run_lock);
-    }
-
-    if (key == 'a') {
-      if (player.getPosition() >= PLAYER_STEP) {
-        player.setPosition(-PLAYER_STEP);
-      }
-    }
-
-    if (key == 'd') {
-      if (player.getPosition() < (_width - PLAYER_STEP)) {
-        player.setPosition(PLAYER_STEP);
-      }
-    }
-
-    if (key == ' ' || key == 'w') {
-      player.fireLaser();
-    }
-  }
-}
-
-void Game::update() {
+void Game::playerLoop() {
   using clock = std::chrono::high_resolution_clock;
   auto last = clock::now();
 
   while(true) {
+    //check if game is over
     omp_set_lock(&run_lock);
-    bool localRunning = _running;
+    bool localRunning = running;
     omp_unset_lock(&run_lock);
 
-    if (!localRunning)
+    if (!localRunning) {
       break;
+    }
 
+    // get time difference between two loop iterations to compute new
+    // position of the player and lasers
     auto now = clock::now();
     float dt = std::chrono::duration<float>(now - last).count();
     last = now;
 
+    //check for position or shooting update
+    omp_set_lock(&player_lock);
+    player_action_t localPlayerState = player_action;
+    player_action = player_action_t::NONE;
+    omp_unset_lock(&player_lock);
+
+    switch(localPlayerState) {
+      case player_action_t::LEFT:
+        if (player.getPosition() >= PLAYER_STEP) {
+          player.setPosition(-PLAYER_STEP);
+        }
+      break;
+
+      case player_action_t::RIGHT:
+        if (player.getPosition() < (_width - PLAYER_STEP)) {
+          player.setPosition(PLAYER_STEP);
+        }
+      break;
+      
+      case player_action_t::SHOOT:
+        player.fireLaser();
+      break;
+
+      default:
+      break;
+    }
+
+    //update player and/or laser position
     player.update(dt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+}
 
-    omp_set_lock(&asteroid_lock);
+void Game::asteroidLoop() {
+  using clock = std::chrono::high_resolution_clock;
+  auto last = clock::now();
 
+  while(true) {
+    //check if game is over
+    omp_set_lock(&run_lock);
+    bool localRunning = running;
+    omp_unset_lock(&run_lock);
 
-    #pragma omp parallel num_threads(_activeAsteroids)
-    { 
+    if (!localRunning) {
+      break;
+    }
+
+    // get time difference between two loop iterations to compute new
+    // position of the asteroid
+    auto now = clock::now();
+    float dt = std::chrono::duration<float>(now - last).count();
+    last = now;
+
+//    #pragma omp parallel num_threads(_activeAsteroids)
       std::mt19937 local_rng(1234 + omp_get_thread_num());
       
-      #pragma omp for
+//      #pragma omp for
       for (int i = 0; i < _activeAsteroids; ++i) {
         // update position
+        omp_set_lock(&asteroid_lock);
         asteroids[i].update(dt);
+        omp_unset_lock(&asteroid_lock);
 
         // check for collision
-        if (player.hitAsteroid(asteroids[i].getPosition(), asteroids[i].getSize())) {
+        omp_set_lock(&asteroid_lock);
+        cv::Point position = asteroids[i].getPosition();
+        cv::Size size = asteroids[i].getSize();     
+        omp_unset_lock(&asteroid_lock);
+
+        if (player.hitAsteroid(position, size)) {
           omp_set_lock(&score_lock);
           _score++;
           bool reached_score = _score == WINNING_SCORE ? true : false;
           omp_unset_lock(&score_lock);
 
           if (reached_score) {
-            omp_set_lock(&result_lock);
-            _won = true;
-            omp_unset_lock(&result_lock);
+            omp_set_lock(&state_lock);
+            game_state.won = true;
+            omp_unset_lock(&state_lock);
           }
           
           // regenerate asteroid
-          asteroids[i].setPosition(dist(local_rng));
+          omp_set_lock(&asteroid_lock);
+          asteroids[i].setPosition(dist(rng));
+          omp_unset_lock(&asteroid_lock);
         }
 
         // check for asteroid landing
-        if (asteroids[i].getPosition().y >= _height) {
-          omp_set_lock(&result_lock);
-          _lost = true;
-          omp_unset_lock(&result_lock);
+        omp_set_lock(&asteroid_lock);
+        int asteroidPosY = asteroids[i].getPosition().y;
+        omp_unset_lock(&asteroid_lock);
+        
+        if (asteroidPosY >= _height) {
+          omp_set_lock(&state_lock);
+          game_state.lost = true;
+          omp_unset_lock(&state_lock);
         }
       }
-    }
-
-    omp_unset_lock(&asteroid_lock);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
-  
 }
 
-void Game::render() {
+void Game::guiLoop() {
   while(true) {
+    //check if game is over
     omp_set_lock(&run_lock);
-    bool localRunning = _running;
+    bool localRunning = running;
     omp_unset_lock(&run_lock);
 
-    if (!localRunning)
+    if (!localRunning) {
       break;
+    }
 
+    //create window and render elements
     frame.setTo(cv::Scalar(0, 0, 0));
 
+    drawScore();
+    player.draw(frame);
+
+    for (Asteroid &iterator : asteroids) {
+      omp_set_lock(&asteroid_lock);
+      if (iterator.getActiveStatus()) {
+        iterator.draw(frame);
+      }
+      omp_unset_lock(&asteroid_lock);
+    }
+
+    //check if won or lost and draw appropriate message if that is the case
+    checkEndGame();
+
+    cv::imshow("Space Invaders", frame);
+
+    //handle key and cursor input
+    int key = cv::waitKey(1);
+    processCursorInput(key);
+    processKeyInput(key);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+}
+
+void Game::processCursorInput(int key) {
+    if (cv::getWindowProperty("Space Invaders", cv::WND_PROP_VISIBLE) < 1) {
+      omp_set_lock(&run_lock);
+      running = false;
+      omp_unset_lock(&run_lock);
+    }
+}
+
+void Game::processKeyInput(int key) {
+
+
+    // Esc button pressed
+    if (key == 27) {
+      omp_set_lock(&run_lock);
+      running = false;
+      omp_unset_lock(&run_lock);
+    }
+
+    if (key == 'a') {
+      omp_set_lock(&player_lock);
+      player_action = player_action_t::LEFT;
+      omp_unset_lock(&player_lock);
+    }
+
+    if (key == 'd') {
+      omp_set_lock(&player_lock);
+      player_action = player_action_t::RIGHT;
+      omp_unset_lock(&player_lock);
+    }
+
+    if (key == ' ' || key == 'w') {
+      omp_set_lock(&player_lock);
+      player_action = player_action_t::SHOOT;
+      omp_unset_lock(&player_lock);
+    }
+}
+
+void Game::drawScore() {
     omp_set_lock(&score_lock);
     std::string scoreText = "_score " + std::to_string(_score) + "/" + std::to_string(WINNING_SCORE);
     omp_unset_lock(&score_lock);
@@ -174,27 +268,17 @@ void Game::render() {
                 cv::Scalar(255, 255, 255),
                 2,
                 cv::LINE_AA);
+}
 
-    player.draw(frame);
-
-    omp_set_lock(&asteroid_lock);
-    for (Asteroid &iterator : asteroids) {
-      if (iterator.getActiveStatus() == false) {
-        continue;
-      }
-
-      iterator.draw(frame);
-    }
-    omp_unset_lock(&asteroid_lock);
-
-    omp_set_lock(&result_lock);
-    bool result = _won || _lost;
-    omp_unset_lock(&result_lock);
+void Game::checkEndGame() {
+      omp_set_lock(&state_lock);
+    bool result = game_state.won || game_state.lost;
+    omp_unset_lock(&state_lock);
 
     if (result) {
-      omp_set_lock(&result_lock);
-      std::string text = _lost ? "GAME OVER" : "YOU WON";
-      omp_unset_lock(&result_lock);
+      omp_set_lock(&state_lock);
+      std::string text = game_state.lost ? "GAME OVER" : "YOU WON";
+      omp_unset_lock(&state_lock);
 
       int font = cv::FONT_HERSHEY_SIMPLEX;
       double scale = 2.0;
@@ -207,33 +291,17 @@ void Game::render() {
       cv::Point textOrg((_width - textSize.width) / 2,
                         (_height + textSize.height) / 2);
 
-      omp_set_lock(&result_lock);
-      cv::Scalar color = _lost ? cv::Scalar(0, 0, 255)
+      omp_set_lock(&state_lock);
+      cv::Scalar color = game_state.lost ? cv::Scalar(0, 0, 255)
                             : cv::Scalar(0, 255, 0);
-      omp_unset_lock(&result_lock);
+      omp_unset_lock(&state_lock);
 
       cv::putText(frame, text, textOrg, font, scale, color, thickness,
                   cv::LINE_AA);
           
       omp_set_lock(&run_lock);
-      _running = false;
+      running = false;
       omp_unset_lock(&run_lock);
-    }
-
-    cv::imshow("Space Invaders", frame);
-
-    // X Button on frame pressed
-    if (cv::getWindowProperty("Space Invaders", cv::WND_PROP_VISIBLE) < 1) {
-      omp_set_lock(&run_lock);
-      _running = false;
-      break;
-      omp_unset_lock(&run_lock);
-    }
-
-    omp_set_lock(&run_lock);
-    if (_running == false) {
       cv::waitKey(0);
     }
-    omp_unset_lock(&run_lock);
-  }
 }

@@ -13,7 +13,7 @@ private:
 
 public:
   Laser(cv::Size &&size);
-  ~Laser() = default;
+  ~Laser()=default;
 
   void update(float dt) override;
   void draw(cv::Mat &frame) override;

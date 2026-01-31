@@ -3,6 +3,10 @@
 Laser::Laser(cv::Size &&size) : Entity(std::move(size)) { alive = false; }
 
 void Laser::update(float dt) {
+  if (alive == false) {
+    return;
+  }
+  
   pos.y -= speed * dt;
   if (pos.y < 0) {
     alive = false;
@@ -10,7 +14,6 @@ void Laser::update(float dt) {
 }
 
 void Laser::draw(cv::Mat &frame) {
-
   cv::Point bottomRight(pos.x + size.width, pos.y + size.height);
   cv::rectangle(frame, pos, bottomRight, {255, 255, 255}, -1);
 }
