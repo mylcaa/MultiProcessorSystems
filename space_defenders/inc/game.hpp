@@ -56,10 +56,10 @@ private:
   /* 1st thread - player movement */
   void playerLoop();
 
-  /* (n-2) threads - asteroid movement */
+  /* 2nd threads - asteroid movement */
   void asteroidLoop();
 
-  /* 2nd thread - handle input and render */
+  /* 3rd thread - handle input, render and  */
   void guiLoop();
 
   //helper functions

@@ -6,13 +6,10 @@ Asteroid::Asteroid(cv::Size &&size, int frameHeight)
 }
 
 void Asteroid::update(float dt) {
-  std::cout << "ASTEROID alive = " << alive << " dt = " << dt << std::endl;
-  std::cout << "BEFORE pos.y = " << pos.y << std::endl;
   if (alive == false) {
     return;
   }
   pos.y += speed * dt;
-  std::cout << "AFTER pos.y = " << pos.y << std::endl;
   
 }
 

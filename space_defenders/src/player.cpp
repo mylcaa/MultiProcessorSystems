@@ -1,14 +1,12 @@
 #include "player.hpp"
 
 Player::Player(cv::Point &&pos, cv::Size &&size, std::vector<Laser> &lasers)
-    : Entity(std::move(pos), std::move(size)), 
-      lasers(lasers) 
-    {
-      omp_init_lock(&player_lock);
-      omp_init_lock(&laser_lock);
-    }
+    : Entity(std::move(pos), std::move(size)), lasers(lasers) {
+  omp_init_lock(&player_lock);
+  omp_init_lock(&laser_lock);
+}
 
-Player::~Player() { 
+Player::~Player() {
   omp_destroy_lock(&player_lock);
   omp_destroy_lock(&laser_lock);
 }
@@ -76,15 +74,15 @@ bool Player::hitAsteroid(cv::Point asteroidPosition, cv::Size asteroidSize) {
   return false;
 }
 
-int Player::getPosition() { 
+int Player::getPosition() {
   omp_set_lock(&player_lock);
-  int x = pos.x; 
+  int x = pos.x;
   omp_unset_lock(&player_lock);
   return x;
 }
 
-void Player::setPosition(int dx) { 
+void Player::setPosition(int dx) {
   omp_set_lock(&player_lock);
-  pos.x += dx; 
+  pos.x += dx;
   omp_unset_lock(&player_lock);
 }

@@ -4,7 +4,8 @@
 #include "entity.hpp"
 #include <omp.h>
 
-#define ASTEROID_CAPACITY 6
+#define ASTEROID_MAX_CAPACITY 5
+#define ASTEROID_MIN_CAPACITY 2
 #define ASTEROID_WIDTH 20
 #define ASTEROID_HEIGHT 20
 

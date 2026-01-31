@@ -3,18 +3,14 @@
 Laser::Laser(cv::Size &&size) : Entity(std::move(size)) { alive = false; }
 
 void Laser::update(float dt) {
-  std::cout << "LASER alive = " << alive << " dt = " << dt << std::endl;
-  std::cout << "BEFORE pos.y = " << pos.y << std::endl;
   if (alive == false) {
     return;
   }
   
   pos.y -= speed * dt;
-  std::cout << "AFTER pos.y = " << pos.y << std::endl;
   if (pos.y < 0) {
     alive = false;
   }
-  std::cout << "AFTER alive = " << alive << std::endl;
 }
 
 void Laser::draw(cv::Mat &frame) {
