@@ -10,7 +10,7 @@
 
 class Asteroid final : public Entity {
 private:
-  float speed = 200;
+  float speed = 100;
   int frameHeight;
 
 public:

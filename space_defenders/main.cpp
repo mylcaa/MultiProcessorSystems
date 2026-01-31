@@ -19,7 +19,7 @@ int main() {
         asteroids.push_back(Asteroid(cv::Size(ASTEROID_WIDTH, ASTEROID_HEIGHT), FRAME_HEIGHT));
     }
 //Game start
-    Game game(player, asteroids, FRAME_WIDTH, FRAME_HEIGHT);
+    Game game(player, asteroids, FRAME_WIDTH, FRAME_HEIGHT, 2);
     game.run();
 
     return 0;

@@ -42,7 +42,7 @@ void Game::run() {
 
   //run the three parts of the game on seperate threads
   int num_threads = 3;
-  #pragma omp parallel num_threads(num_threads) shared(player, asteroids, running, _width, _height, _activeAsteroids, _score, game_state, player_action, frame)
+  #pragma omp parallel num_threads(num_threads)
   {
     int tid = omp_get_thread_num();
 
@@ -106,7 +106,7 @@ void Game::playerLoop() {
 
     //update player and/or laser position
     player.update(dt);
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 }
 
@@ -136,6 +136,7 @@ void Game::asteroidLoop() {
 //      #pragma omp for
       for (int i = 0; i < _activeAsteroids; ++i) {
         // update position
+        std::cout << "asteroid[" << i << "]" << std::endl;
         omp_set_lock(&asteroid_lock);
         asteroids[i].update(dt);
         omp_unset_lock(&asteroid_lock);
@@ -175,7 +176,7 @@ void Game::asteroidLoop() {
           omp_unset_lock(&state_lock);
         }
       }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 }
 
