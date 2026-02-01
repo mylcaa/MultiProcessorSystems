@@ -12,7 +12,6 @@
 
 class Player final : public Entity {
 private:
-  float speed = 300.0f;
   std::vector<Laser> &lasers;
 
   omp_lock_t player_lock;
